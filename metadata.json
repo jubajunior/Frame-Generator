@@ -1,0 +1,5 @@
+{
+  "name": "Bangladesh Islami Chhatra Majlis Anniversary Frame Generator",
+  "description": "A web application to generate custom profile frames and greeting cards celebrating the 36st anniversary of Bangladesh Islami Chhatra Majlis's republishing. Features image uploading, canvas processing, and downloading.",
+  "requestFramePermissions": []
+}
