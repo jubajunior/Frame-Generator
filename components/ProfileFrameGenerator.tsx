@@ -23,13 +23,17 @@ const ProfileFrameGenerator: React.FC<ProfileFrameGeneratorProps> = ({ userImage
   const loadImage = (src: string): Promise<HTMLImageElement> => {
     return new Promise((resolve, reject) => {
       const img = new Image();
+      // Only set crossOrigin if it's an external URL to avoid issues with dataURLs
       if (src.startsWith('http')) {
         img.crossOrigin = "anonymous";
       }
+      
       img.onload = () => resolve(img);
-      img.onerror = () => reject(new Error(`Failed to load: ${src.substring(0, 30)}`));
-      const cacheBuster = retryCount > 0 ? `?v=${retryCount}` : '';
-      img.src = src.startsWith('data:') ? src : src + cacheBuster;
+      img.onerror = () => reject(new Error(`Could not load image. Please try another one.`));
+      
+      // Append cache buster for external URLs to bypass stale cache issues on Netlify/CDN
+      const cacheBuster = src.startsWith('http') ? (src.includes('?') ? `&v=${retryCount}` : `?v=${retryCount}`) : '';
+      img.src = src + cacheBuster;
     });
   };
 
@@ -44,8 +48,6 @@ const ProfileFrameGenerator: React.FC<ProfileFrameGeneratorProps> = ({ userImage
     canvas.height = size;
     
     ctx.clearRect(0, 0, size, size);
-    ctx.fillStyle = 'white';
-    ctx.fillRect(0, 0, size, size);
 
     if (userImage) {
       setIsProcessing(true);
@@ -56,13 +58,15 @@ const ProfileFrameGenerator: React.FC<ProfileFrameGeneratorProps> = ({ userImage
           loadImage(FRAME_OVERLAY_URL)
         ]);
 
+        ctx.fillStyle = 'white';
+        ctx.fillRect(0, 0, size, size);
+
         // 1. Draw User Image with Pan & Zoom
         const baseScale = Math.max(size / uImg.width, size / uImg.height);
         const currentScale = baseScale * zoom;
         const w = uImg.width * currentScale;
         const h = uImg.height * currentScale;
 
-        // Apply offsets (scaled to 4K internal resolution)
         const containerWidth = containerRef.current?.offsetWidth || 1;
         const scaleToCanvas = size / containerWidth;
         
@@ -75,6 +79,7 @@ const ProfileFrameGenerator: React.FC<ProfileFrameGeneratorProps> = ({ userImage
         ctx.drawImage(fImg, 0, 0, size, size);
 
       } catch (err: any) {
+        console.error("Profile Generator Error:", err);
         setErrorState(err.message);
       } finally {
         setIsProcessing(false);
@@ -86,6 +91,7 @@ const ProfileFrameGenerator: React.FC<ProfileFrameGeneratorProps> = ({ userImage
       ctx.textAlign = 'center';
       ctx.font = 'bold 150px "Noto Sans Bengali", Arial';
       ctx.fillText('আপনার ছবি আপলোড করুন', size / 2, size / 2);
+      setErrorState(null); // Clear errors when image is removed
     }
   }, [userImage, zoom, offset, retryCount]);
 
@@ -117,18 +123,21 @@ const ProfileFrameGenerator: React.FC<ProfileFrameGeneratorProps> = ({ userImage
   const handleDownload = () => {
     const canvas = canvasRef.current;
     if (!canvas || !userImage || isProcessing || errorState) return;
-    const dataUrl = canvas.toDataURL('image/png', 1.0);
-    const link = document.createElement('a');
-    link.download = `majlis-profile-4k-${Date.now()}.png`;
-    link.href = dataUrl;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    try {
+      const dataUrl = canvas.toDataURL('image/png', 1.0);
+      const link = document.createElement('a');
+      link.download = `majlis-profile-4k-${Date.now()}.png`;
+      link.href = dataUrl;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (e) {
+      setErrorState("Download failed due to security restrictions. Try using a direct upload.");
+    }
   };
 
   return (
     <div className="w-full flex flex-col items-center gap-8">
-      {/* Interactive Frame Canvas */}
       <div 
         ref={containerRef}
         onMouseDown={handleStart}
@@ -147,7 +156,7 @@ const ProfileFrameGenerator: React.FC<ProfileFrameGeneratorProps> = ({ userImage
             className={`w-full h-full object-contain transition-opacity duration-500 ${isProcessing ? 'opacity-40' : 'opacity-100'}`} 
           />
           
-          {userImage && !isProcessing && (
+          {userImage && !isProcessing && !errorState && (
             <div className="absolute top-4 right-4 bg-black/20 backdrop-blur-md p-2 rounded-full opacity-0 group-hover:opacity-100 transition-opacity">
               <Move className="w-5 h-5 text-white" />
             </div>
@@ -162,17 +171,20 @@ const ProfileFrameGenerator: React.FC<ProfileFrameGeneratorProps> = ({ userImage
 
           {errorState && (
             <div className="absolute inset-0 flex flex-col items-center justify-center bg-red-50/95 p-6 text-center">
-              <AlertCircle className="w-10 h-10 text-red-500 mb-4" />
-              <button onClick={() => setRetryCount(c => c + 1)} className="bg-red-600 text-white px-8 py-3 rounded-full text-sm font-bold shadow-lg">
-                <RefreshCw className="w-4 h-4 mr-2 inline" /> পুনরায় চেষ্টা করুন
+              <AlertCircle className="w-10 h-10 text-red-500 mb-4 mx-auto" />
+              <p className="text-red-700 font-bold mb-6">{errorState}</p>
+              <button 
+                onClick={() => setRetryCount(c => c + 1)} 
+                className="flex items-center gap-2 bg-red-600 text-white px-8 py-3 rounded-full text-sm font-bold shadow-lg hover:bg-red-700 active:scale-95 transition-all"
+              >
+                <RefreshCw className="w-4 h-4" /> পুনরায় চেষ্টা করুন
               </button>
             </div>
           )}
         </div>
       </div>
 
-      {/* Adjust Controls */}
-      {userImage && (
+      {userImage && !errorState && (
         <div className="w-full max-w-sm space-y-4 px-4">
           <div className="flex items-center gap-4 bg-white/60 backdrop-blur-sm p-4 rounded-3xl border border-white shadow-sm">
             <ZoomOut className="w-5 h-5 text-slate-400" />

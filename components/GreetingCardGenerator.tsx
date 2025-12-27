@@ -30,9 +30,10 @@ const GreetingCardGenerator: React.FC<GreetingCardGeneratorProps> = ({ userImage
         img.crossOrigin = "anonymous";
       }
       img.onload = () => resolve(img);
-      img.onerror = () => reject(new Error(`Failed to load: ${src.substring(0, 30)}`));
-      const cacheBuster = retryCount > 0 ? `?v=${retryCount}` : '';
-      img.src = src.startsWith('data:') ? src : src + cacheBuster;
+      img.onerror = () => reject(new Error(`Could not load frame. Please try again.`));
+      
+      const cacheBuster = src.startsWith('http') ? (src.includes('?') ? `&v=${retryCount}` : `?v=${retryCount}`) : '';
+      img.src = src + cacheBuster;
     });
   };
 
@@ -138,6 +139,7 @@ const GreetingCardGenerator: React.FC<GreetingCardGeneratorProps> = ({ userImage
         ctx.fillText('BANGLADESH ISLAMI CHHATRA MAJLIS', cw / 2, ch * 0.98);
 
       } catch (err: any) {
+        console.error("Greeting Card Error:", err);
         setErrorState(err.message);
       } finally {
         setIsProcessing(false);
@@ -153,6 +155,7 @@ const GreetingCardGenerator: React.FC<GreetingCardGeneratorProps> = ({ userImage
       ctx.fillText('আপনার ছবি আপলোড করুন', 600, 550);
       ctx.font = 'normal 30px "Noto Sans Bengali", Arial';
       ctx.fillText('একটি সুন্দর কার্ড তৈরি হবে', 600, 620);
+      setErrorState(null);
     }
   }, [userImage, name, message, zoom, offset, retryCount]);
 
@@ -180,13 +183,17 @@ const GreetingCardGenerator: React.FC<GreetingCardGeneratorProps> = ({ userImage
   const handleDownload = () => {
     const canvas = canvasRef.current;
     if (!canvas || !userImage || isProcessing || errorState) return;
-    const dataUrl = canvas.toDataURL('image/png', 1.0);
-    const link = document.createElement('a');
-    link.download = `majlis-greeting-card-4k-${Date.now()}.png`;
-    link.href = dataUrl;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    try {
+      const dataUrl = canvas.toDataURL('image/png', 1.0);
+      const link = document.createElement('a');
+      link.download = `majlis-greeting-card-4k-${Date.now()}.png`;
+      link.href = dataUrl;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (e) {
+      setErrorState("Download blocked. Please try another image or browser.");
+    }
   };
 
   return (
@@ -205,7 +212,7 @@ const GreetingCardGenerator: React.FC<GreetingCardGeneratorProps> = ({ userImage
         <div className="absolute -inset-4 bg-gradient-to-tr from-[#004d26] to-emerald-400 rounded-[3rem] opacity-20 blur-2xl group-hover:opacity-30 transition-opacity duration-700"></div>
         <div className="relative w-full bg-white shadow-2xl rounded-[2.5rem] overflow-hidden border-8 border-white group-hover:border-green-50 transition-all duration-500" style={{ aspectRatio: `${aspectRatio}` }}>
           <canvas ref={canvasRef} className={`w-full h-full object-contain transition-opacity duration-500 ${isProcessing ? 'opacity-40' : 'opacity-100'}`} />
-          {userImage && !isProcessing && (
+          {userImage && !isProcessing && !errorState && (
             <div className="absolute top-4 right-4 bg-black/20 backdrop-blur-md p-2 rounded-full opacity-0 group-hover:opacity-100 transition-opacity">
               <Move className="w-5 h-5 text-white" />
             </div>
@@ -218,16 +225,20 @@ const GreetingCardGenerator: React.FC<GreetingCardGeneratorProps> = ({ userImage
           )}
           {errorState && (
             <div className="absolute inset-0 flex flex-col items-center justify-center bg-red-50/95 p-6 text-center">
-              <AlertCircle className="w-10 h-10 text-red-500 mb-4" />
-              <button onClick={() => setRetryCount(c => c + 1)} className="bg-red-600 text-white px-8 py-3 rounded-full text-sm font-bold shadow-lg">
-                <RefreshCw className="w-4 h-4 mr-2 inline" /> পুনরায় চেষ্টা করুন
+              <AlertCircle className="w-10 h-10 text-red-500 mb-4 mx-auto" />
+              <p className="text-red-700 font-bold mb-6">{errorState}</p>
+              <button 
+                onClick={() => setRetryCount(c => c + 1)} 
+                className="flex items-center gap-2 bg-red-600 text-white px-8 py-3 rounded-full text-sm font-bold shadow-lg hover:bg-red-700 active:scale-95 transition-all"
+              >
+                <RefreshCw className="w-4 h-4" /> পুনরায় চেষ্টা করুন
               </button>
             </div>
           )}
         </div>
       </div>
 
-      {userImage && (
+      {userImage && !errorState && (
         <div className="w-full max-w-sm space-y-4 px-4">
           <div className="flex items-center gap-4 bg-white/60 backdrop-blur-sm p-4 rounded-3xl border border-white shadow-sm">
             <ZoomOut className="w-5 h-5 text-slate-400" />
